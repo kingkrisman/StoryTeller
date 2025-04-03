@@ -1,0 +1,2006 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Story Reader</title>
+    <!-- Tesseract.js for OCR -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+    <style>
+      /* Base Styles & Reset */
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        font-family:
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          Oxygen,
+          Ubuntu,
+          Cantarell,
+          "Open Sans",
+          "Helvetica Neue",
+          sans-serif;
+      }
+
+      :root {
+        --primary: #0ea5e9;
+        --primary-dark: #0284c7;
+        --primary-light: #38bdf8;
+        --secondary: #7c3aed;
+        --secondary-dark: #6d28d9;
+        --accent: #f59e0b;
+        --accent-dark: #d97706;
+        --success: #10b981;
+        --success-dark: #059669;
+        --danger: #ef4444;
+        --danger-dark: #dc2626;
+        --bg-dark: #0f172a;
+        --bg-medium: #1e293b;
+        --text-light: #f0f9ff;
+        --text-muted: #64748b;
+        --border-light: rgba(56, 189, 248, 0.2);
+        --border-medium: rgba(56, 189, 248, 0.3);
+        --border-focus: rgba(56, 189, 248, 0.8);
+        --shadow-sm: 0 4px 6px rgba(0, 0, 0, 0.1);
+        --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.2);
+        --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.2);
+        --glow-primary: 0 0 20px rgba(14, 165, 233, 0.3);
+        --glow-primary-lg: 0 0 40px rgba(14, 165, 233, 0.6);
+        --glow-secondary: 0 0 20px rgba(124, 58, 237, 0.3);
+        --glow-secondary-lg: 0 0 40px rgba(124, 58, 237, 0.6);
+        --transition-fast: 0.2s ease;
+        --transition-medium: 0.3s ease;
+        --transition-slow: 0.5s ease;
+        --radius-sm: 8px;
+        --radius-md: 16px;
+        --radius-lg: 24px;
+        --blur-sm: 8px;
+        --blur-md: 12px;
+        --blur-lg: 16px;
+      }
+
+      body {
+        background-color: var(--bg-dark);
+        overflow-x: hidden;
+        color: var(--text-light);
+        line-height: 1.5;
+      }
+
+      /* Main Container */
+      .story-reader {
+        max-width: 100vw;
+        margin: 0 auto;
+        padding: 20px;
+        background: linear-gradient(
+          135deg,
+          var(--bg-dark) 0%,
+          var(--bg-medium) 100%
+        );
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        position: relative;
+        overflow: hidden;
+        perspective: 1000px;
+      }
+
+      /* Parallax Layers */
+      .parallax-layer {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        will-change: transform;
+        transition: transform 0.1s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      }
+
+      .layer-1 {
+        background: radial-gradient(
+          circle at 20% 30%,
+          rgba(56, 189, 248, 0.15) 0%,
+          transparent 70%
+        );
+        z-index: 1;
+      }
+
+      .layer-2 {
+        background: radial-gradient(
+          circle at 80% 70%,
+          rgba(14, 165, 233, 0.15) 0%,
+          transparent 70%
+        );
+        z-index: 2;
+      }
+
+      .layer-3 {
+        z-index: 3;
+      }
+
+      /* Header Section */
+      .reader-header {
+        display: flex;
+        align-items: center;
+        
+        gap: 20px;
+        padding: 20px;
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(var(--blur-md));
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border-light);
+        box-shadow:
+          var(--shadow-md),
+          inset 0 0 2px rgba(56, 189, 248, 0.1);
+        position: relative;
+        overflow: hidden;
+        z-index: 10;
+        transform-style: preserve-3d;
+        transition:
+          transform var(--transition-medium),
+          box-shadow var(--transition-medium);
+      }
+
+      .reader-header:hover {
+        transform: translateZ(10px);
+        box-shadow:
+          var(--shadow-lg),
+          inset 0 0 4px rgba(56, 189, 248, 0.2);
+      }
+
+      .reader-header::before {
+        content: "";
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: linear-gradient(
+          45deg,
+          transparent,
+          rgba(56, 189, 248, 0.1),
+          transparent
+        );
+        transform: rotate(45deg);
+        animation: shine 6s linear infinite;
+      }
+
+      .reading-controls {
+        display: flex;
+        gap: 20px;
+        flex: 1;
+      }
+
+      .reading-controls label {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 14px;
+        color: var(--text-muted);
+      }
+
+      .reading-controls input[type="range"] {
+        width: 100px;
+        height: 6px;
+        appearance: none;
+        background: rgba(56, 189, 248, 0.2);
+        border-radius: 3px;
+        outline: none;
+        accent-color: var(--primary);
+        transition: background var(--transition-fast);
+      }
+
+      .reading-controls input[type="range"]::-webkit-slider-thumb {
+        appearance: none;
+        width: 16px;
+        height: 16px;
+        background: var(--primary);
+        border-radius: 50%;
+        cursor: pointer;
+        transition:
+          transform var(--transition-fast),
+          box-shadow var(--transition-fast);
+      }
+
+      .reading-controls input[type="range"]::-moz-range-thumb {
+        width: 16px;
+        height: 16px;
+        background: var(--primary);
+        border: none;
+        border-radius: 50%;
+        cursor: pointer;
+        transition:
+          transform var(--transition-fast),
+          box-shadow var(--transition-fast);
+      }
+
+      .reading-controls input[type="range"]:hover::-webkit-slider-thumb,
+      .reading-controls input[type="range"]:focus::-webkit-slider-thumb {
+        transform: scale(1.2);
+        box-shadow: 0 0 10px rgba(14, 165, 233, 0.5);
+      }
+
+      .reading-controls input[type="range"]:hover::-moz-range-thumb,
+      .reading-controls input[type="range"]:focus::-moz-range-thumb {
+        transform: scale(1.2);
+        box-shadow: 0 0 10px rgba(14, 165, 233, 0.5);
+      }
+
+      .reading-controls input[type="range"]:hover,
+      .reading-controls input[type="range"]:focus {
+        background: rgba(56, 189, 248, 0.3);
+      }
+
+      /* Buttons */
+      .control-button {
+        padding: 12px 24px;
+        background: linear-gradient(
+          135deg,
+          var(--primary) 0%,
+          var(--primary-dark) 100%
+        );
+        color: white;
+        border: none;
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        font-weight: 600;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        transition: all var(--transition-medium);
+        position: relative;
+        overflow: hidden;
+        box-shadow: var(--glow-primary);
+      }
+
+      .control-button::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          45deg,
+          transparent,
+          rgba(255, 255, 255, 0.2),
+          transparent
+        );
+        transform: translateX(-100%);
+        transition: transform 0.6s;
+      }
+
+      .control-button:hover::after {
+        transform: translateX(100%);
+      }
+
+      .control-button:hover {
+        background: #2563eb;
+        transform: translateY(-2px);
+        box-shadow: var(--glow-primary-lg);
+      }
+
+      .control-button:active {
+        transform: translateY(0);
+        box-shadow: var(--glow-primary);
+      }
+
+      /* Main Content Area */
+      .book-content {
+        flex: 1;
+        padding: 40px;
+        background: rgba(15, 23, 42, 0.4);
+        backdrop-filter: blur(var(--blur-lg));
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border-light);
+        box-shadow:
+          var(--shadow-lg),
+          inset 0 0 3px rgba(56, 189, 248, 0.2);
+        min-height: 500px;
+        color: var(--text-light);
+        position: relative;
+        overflow: hidden;
+        z-index: 10;
+        transform-style: preserve-3d;
+        transition:
+          transform var(--transition-medium),
+          box-shadow var(--transition-medium);
+      }
+
+      .book-content:hover {
+        transform: translateZ(5px);
+        box-shadow:
+          0 20px 60px rgba(0, 0, 0, 0.3),
+          inset 0 0 5px rgba(56, 189, 248, 0.3);
+      }
+
+      .book-content::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          135deg,
+          transparent,
+          rgba(56, 189, 248, 0.05)
+        );
+        pointer-events: none;
+      }
+
+      .page-content {
+        font-size: 18px;
+        line-height: 1.8;
+        color: var(--text-light);
+        text-shadow: 0 0 20px rgba(56, 189, 248, 0.3);
+        position: relative;
+        z-index: 1;
+      }
+
+      .word {
+        display: inline;
+        padding: 0 2px;
+        border-radius: 3px;
+        transition: background-color var(--transition-fast);
+      }
+
+      .word.active {
+        background-color: rgba(56, 189, 248, 0.3);
+        box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+        font-weight: 500;
+      }
+
+      /* Footer Section */
+      .reader-footer {
+        display: flex;
+        justify-content: center;
+        gap: 20px;
+        padding: 20px;
+        z-index: 10;
+      }
+
+      /* Action Buttons */
+      .scan-button,
+      .edit-button,
+      .history-button {
+        padding: 16px 32px;
+        color: white;
+        border: none;
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        font-weight: 600;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        transition: all var(--transition-medium);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .scan-button {
+        background: linear-gradient(
+          135deg,
+          var(--primary) 0%,
+          var(--primary-dark) 100%
+        );
+        box-shadow: var(--glow-primary);
+      }
+
+      .edit-button {
+        background: linear-gradient(
+          135deg,
+          var(--accent) 0%,
+          var(--accent-dark) 100%
+        );
+        box-shadow: 0 0 30px rgba(245, 158, 11, 0.4);
+      }
+
+      .history-button {
+        background: linear-gradient(
+          135deg,
+          var(--secondary) 0%,
+          var(--secondary-dark) 100%
+        );
+        box-shadow: var(--glow-secondary);
+      }
+
+      .scan-button::before,
+      .edit-button::before,
+      .history-button::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          45deg,
+          transparent,
+          rgba(255, 255, 255, 0.2),
+          transparent
+        );
+        transform: translateX(-100%);
+        transition: transform 0.6s;
+      }
+
+      .scan-button:hover::before,
+      .edit-button:hover::before,
+      .history-button:hover::before {
+        transform: translateX(100%);
+      }
+
+      .scan-button:hover {
+        transform: translateY(-3px);
+        box-shadow: var(--glow-primary-lg);
+        background: var(--success);
+      }
+
+      .edit-button:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 0 40px rgba(245, 158, 11, 0.6);
+        background: var(--accent-dark);
+      }
+
+      .history-button:hover {
+        transform: translateY(-3px);
+        box-shadow: var(--glow-secondary-lg);
+        background: var(--secondary-dark);
+      }
+
+      .scan-button:active,
+      .edit-button:active,
+      .history-button:active {
+        transform: translateY(-1px);
+      }
+
+      /* Selectors */
+      .language-selector,
+      .voice-selector,
+      .ocr-language-selector {
+        padding: 10px 14px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border-medium);
+        background: rgba(15, 23, 42, 0.6);
+        color: var(--text-light);
+        font-size: 14px;
+       
+        transition: all var(--transition-medium);
+        cursor: pointer;
+        backdrop-filter: blur(var(--blur-sm));
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 10px center;
+        padding-right: 30px;
+      }
+
+      .language-selector:focus,
+      .voice-selector:focus,
+      .ocr-language-selector:focus {
+        outline: none;
+        border-color: var(--border-focus);
+        box-shadow: 0 0 15px rgba(56, 189, 248, 0.3);
+      }
+
+      .language-selector:hover,
+      .voice-selector:hover,
+      .ocr-language-selector:hover {
+        border-color: var(--border-focus);
+        background-color: rgba(15, 23, 42, 0.8);
+      }
+
+      .language-selector option,
+      .voice-selector option,
+      .ocr-language-selector option {
+        background: var(--bg-medium);
+        color: var(--text-light);
+        padding: 8px;
+      }
+
+      /* History Panel */
+      .history-panel {
+        position: fixed;
+        top: 0;
+        right: -400px;
+        width: 400px;
+        height: 100vh;
+        background: rgba(15, 23, 42, 0.9);
+        backdrop-filter: blur(var(--blur-lg));
+        border-left: 1px solid var(--border-light);
+        box-shadow: -10px 0 30px rgba(0, 0, 0, 0.3);
+        z-index: 100;
+        padding: 20px;
+        transition: right var(--transition-medium);
+        overflow-y: auto;
+      }
+
+      .history-panel.open {
+        right: 0;
+      }
+
+      .history-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--border-light);
+      }
+
+      .history-title {
+        color: var(--text-light);
+        font-size: 24px;
+        font-weight: 600;
+      }
+
+      .close-history {
+        background: none;
+        border: none;
+        color: var(--text-light);
+        font-size: 24px;
+        cursor: pointer;
+        transition: color var(--transition-fast);
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+      }
+
+      .close-history:hover {
+        color: var(--primary);
+        background: rgba(56, 189, 248, 0.1);
+      }
+
+      .history-list {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+      }
+
+      .history-item {
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-sm);
+        padding: 15px;
+        cursor: pointer;
+        transition: all var(--transition-medium);
+      }
+
+      .history-item:hover {
+        background: rgba(15, 23, 42, 0.8);
+        border-color: var(--border-medium);
+        transform: translateY(-2px) scale(1.02);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+      }
+
+      .history-item-title {
+        color: var(--text-light);
+        font-weight: 600;
+        margin-bottom: 5px;
+      }
+
+      .history-item-date {
+        color: var(--text-muted);
+        font-size: 12px;
+      }
+
+      .history-item-preview {
+        color: #94a3b8;
+        font-size: 14px;
+        margin-top: 10px;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      /* File Input */
+      .file-input {
+        display: none;
+      }
+
+      /* Loading Overlay */
+      .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(15, 23, 42, 0.8);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity var(--transition-medium);
+        backdrop-filter: blur(var(--blur-sm));
+      }
+
+      .loading-overlay.active {
+        opacity: 1;
+        pointer-events: all;
+      }
+
+      .spinner {
+        width: 50px;
+        height: 50px;
+        border: 5px solid rgba(56, 189, 248, 0.3);
+        border-radius: 50%;
+        border-top-color: var(--primary);
+        animation: spin 1s linear infinite;
+        margin-bottom: 20px;
+      }
+
+      .loading-text {
+        color: var(--text-light);
+        font-size: 18px;
+        font-weight: 500;
+        text-align: center;
+        max-width: 80%;
+      }
+
+      /* Scan Options */
+      .scan-options {
+        position: absolute;
+        bottom: 100%;
+        left: 0;
+        right: 0;
+        background: rgba(15, 23, 42, 0.9);
+        backdrop-filter: blur(var(--blur-md));
+        border-radius: var(--radius-md);
+        padding: 15px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        transform: translateY(10px);
+        opacity: 0;
+        pointer-events: none;
+        transition: all var(--transition-medium);
+        box-shadow: 0 -5px 20px rgba(0, 0, 0, 0.3);
+        margin-bottom: 10px;
+        border: 1px solid var(--border-light);
+      }
+
+      .scan-button-container {
+        position: relative;
+      }
+
+      .scan-button-container:hover .scan-options {
+        transform: translateY(0);
+        opacity: 1;
+        pointer-events: all;
+      }
+
+      .scan-option {
+        padding: 12px;
+        background: rgba(56, 189, 248, 0.1);
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-sm);
+        color: var(--text-light);
+        cursor: pointer;
+        transition: all var(--transition-medium);
+        text-align: center;
+        font-weight: 500;
+      }
+
+      .scan-option:hover {
+        background: rgba(56, 189, 248, 0.2);
+        border-color: var(--border-medium);
+        transform: translateX(5px);
+      }
+
+      /* Floating Particles */
+      .floating-particle {
+        position: absolute;
+        background: radial-gradient(
+          circle,
+          rgba(56, 189, 248, 0.6) 0%,
+          rgba(56, 189, 248, 0) 70%
+        );
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 1;
+        opacity: 0.5;
+        will-change: transform;
+        transition: transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        filter: blur(8px);
+      }
+
+      /* Edit Mode */
+      .edit-mode .page-content {
+        display: none;
+      }
+
+      .text-editor {
+        display: none;
+        width: 100%;
+        height: 100%;
+        min-height: 400px;
+        background: rgba(15, 23, 42, 0.2);
+        border: 1px solid var(--border-medium);
+        border-radius: var(--radius-sm);
+        padding: 15px;
+        color: var(--text-light);
+        font-size: 18px;
+        line-height: 1.8;
+        resize: none;
+        transition: all var(--transition-medium);
+        font-family: inherit;
+      }
+
+      .text-editor:focus {
+        outline: none;
+        border-color: var(--border-focus);
+        box-shadow: 0 0 20px rgba(56, 189, 248, 0.2);
+      }
+
+      .edit-mode .text-editor {
+        display: block;
+      }
+
+      .editor-controls {
+        display: none;
+        margin-top: 15px;
+        gap: 10px;
+        justify-content: flex-end;
+      }
+
+      .edit-mode .editor-controls {
+        display: flex;
+      }
+
+      .save-button,
+      .cancel-button {
+        padding: 10px 20px;
+        border-radius: var(--radius-sm);
+        font-weight: 600;
+        cursor: pointer;
+        transition: all var(--transition-medium);
+        border: none;
+      }
+
+      .save-button {
+        background: var(--success);
+        color: white;
+      }
+
+      .save-button:hover {
+        background: var(--success-dark);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+      }
+
+      .cancel-button {
+        background: var(--danger);
+        color: white;
+      }
+
+      .cancel-button:hover {
+        background: var(--danger-dark);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+      }
+
+      /* Voice Preview Button */
+      .voice-preview {
+        padding: 8px 16px;
+        background: rgba(56, 189, 248, 0.1);
+        border: 1px solid var(--border-light);
+        border-radius: var(--radius-sm);
+        color: var(--text-light);
+        cursor: pointer;
+        transition: all var(--transition-medium);
+        margin-left: 10px;
+        font-size: 14px;
+        font-weight: 500;
+      }
+
+      .voice-preview:hover {
+        background: rgba(56, 189, 248, 0.2);
+        border-color: var(--border-medium);
+        transform: translateY(-2px);
+      }
+
+      .voice-preview:active {
+        transform: translateY(0);
+      }
+
+      /* Control Rows */
+      .controls-row {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        margin-bottom: 15px;
+      }
+
+      .controls-label {
+        color: var(--text-muted);
+        font-size: 14px;
+        min-width: 60px;
+        font-weight: 500;
+      }
+
+      /* OCR Settings */
+      .ocr-settings {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: rgba(15, 23, 42, 0.9);
+        backdrop-filter: blur(var(--blur-md));
+        border-radius: var(--radius-md);
+        padding: 15px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        transform: translateY(-10px);
+        opacity: 0;
+        pointer-events: none;
+        transition: all var(--transition-medium);
+        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+        margin-top: 10px;
+        z-index: 20;
+        border: 1px solid var(--border-light);
+      }
+
+      .scan-button-container:hover .ocr-settings {
+        transform: translateY(0);
+        opacity: 1;
+        pointer-events: all;
+      }
+
+      .settings-title {
+        color: var(--text-light);
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 10px;
+      }
+
+      .settings-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .settings-label {
+        color: var(--text-muted);
+        font-size: 14px;
+        min-width: 80px;
+      }
+
+      .auto-detect {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      .auto-detect input {
+        accent-color: var(--primary);
+        width: 16px;
+        height: 16px;
+        cursor: pointer;
+      }
+
+      .auto-detect label {
+        color: var(--text-light);
+        font-size: 14px;
+        cursor: pointer;
+      }
+
+      /* Star Particles */
+      .star-particle {
+        position: absolute;
+        width: 2px;
+        height: 2px;
+        background-color: rgba(255, 255, 255, 0.8);
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 0;
+        opacity: 0.7;
+        box-shadow: 0 0 4px rgba(255, 255, 255, 0.8);
+        animation: twinkle 4s infinite;
+      }
+
+      /* Animations */
+      @keyframes twinkle {
+        0%,
+        100% {
+          opacity: 0.2;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 0.7;
+          transform: scale(1.3);
+        }
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      @keyframes shine {
+        from {
+          transform: translateX(-100%) rotate(45deg);
+        }
+        to {
+          transform: translateX(100%) rotate(45deg);
+        }
+      }
+
+      /* Focus Styles for Accessibility */
+      button:focus-visible,
+      select:focus-visible,
+      input:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
+
+      /* Responsive Styles */
+      @media (max-width: 768px) {
+        .reader-header {
+          padding: 15px;
+        }
+
+        .book-content {
+          padding: 25px;
+        }
+
+        .controls-row {
+          flex-wrap: wrap;
+        }
+      }
+
+      @media (max-width: 640px) {
+        .reader-header {
+          flex-direction: column;
+          align-items: stretch;
+          gap: 15px;
+        }
+
+        .reading-controls {
+          flex-direction: column;
+          gap: 15px;
+        }
+
+        .reading-controls input[type="range"] {
+          width: 100%;
+        }
+
+        .reader-footer {
+          flex-direction: column;
+          gap: 15px;
+        }
+
+        .history-panel {
+          width: 100%;
+          right: -100%;
+        }
+
+        .controls-row {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 10px;
+        }
+
+        .voice-preview {
+          margin-left: 0;
+          margin-top: 10px;
+          width: 100%;
+          text-align: center;
+        }
+
+        .language-selector,
+        .voice-selector,
+        .ocr-language-selector {
+          width: 100%;
+        }
+
+        .scan-button,
+        .edit-button,
+        .history-button {
+          width: 100%;
+        }
+      }
+
+      /* Print Styles */
+      @media print {
+        .story-reader {
+          background: white;
+          color: black;
+          padding: 0;
+        }
+
+        .reader-header,
+        .reader-footer,
+        .parallax-layer,
+        .floating-particle,
+        .star-particle {
+          display: none;
+        }
+
+        .book-content {
+          box-shadow: none;
+          border: none;
+          background: white;
+          padding: 0;
+        }
+
+        .page-content {
+          color: black;
+          text-shadow: none;
+        }
+
+        .word.active {
+          background: none;
+          box-shadow: none;
+          font-weight: normal;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="story-reader" id="storyReader">
+      <div class="parallax-layer layer-1" id="layer1"></div>
+      <div class="parallax-layer layer-2" id="layer2"></div>
+      <div class="parallax-layer layer-3" id="layer3"></div>
+
+      <header class="reader-header">
+        <div class="controls-row">
+          <button class="control-button" id="playPauseButton">
+            <span id="playPauseText">Play</span>
+          </button>
+          <div class="controls-label">Voice:</div>
+          <select  class="voice-selector" id="voiceSelector">
+            <option  value="">Default Voice</option>
+            <!-- Voice options will be populated by JavaScript -->
+          </select>
+          <button class="voice-preview" id="previewVoice">Preview</button>
+        </div>
+
+        <div class="reading-controls">
+          <label>
+            <span>Speed:</span>
+            <input
+              type="range"
+              min="0.5"
+              max="2"
+              step="0.1"
+              value="1"
+              id="speedControl"
+            />
+          </label>
+          <label>
+            <span>Pitch:</span>
+            <input
+              type="range"
+              min="0.5"
+              max="2"
+              step="0.1"
+              value="1"
+              id="pitchControl"
+            />
+          </label>
+        </div>
+
+        <div   class="controls-row">
+          <div class="controls-label">Language:</div>
+          <select style="width: 20px;" class="language-selector" id="languageSelector">
+            <!-- Language options will be populated by JavaScript -->
+          </select>
+        </div>
+      </header>
+
+      <section class="book-content" id="bookContent">
+        <div class="page-content" id="textContent">
+          Scan a book page to begin reading
+        </div>
+        <textarea class="text-editor" id="textEditor"></textarea>
+        <div class="editor-controls">
+          <button class="save-button" id="saveEdit">Save</button>
+          <button class="cancel-button" id="cancelEdit">Cancel</button>
+        </div>
+      </section>
+
+      <footer class="reader-footer">
+        <div class="scan-button-container">
+          <button class="scan-button" id="scanButton">Scan Page</button>
+          <div class="scan-options">
+            <div class="scan-option" id="uploadOption">Upload Image</div>
+            <div class="scan-option" id="cameraOption">Use Camera</div>
+          </div>
+          <div class="ocr-settings">
+            <div class="settings-title">OCR Settings</div>
+            <div class="settings-row">
+              <div class="settings-label">Language:</div>
+              <select class="ocr-language-selector" id="ocrLanguageSelector">
+                <!-- OCR language options will be populated by JavaScript -->
+              </select>
+            </div>
+            <div class="auto-detect">
+              <input type="checkbox" id="autoDetectLang" checked />
+              <label for="autoDetectLang">Auto-detect language</label>
+            </div>
+          </div>
+        </div>
+        <button class="edit-button" id="editButton">Edit Text</button>
+        <button class="history-button" id="historyButton">History</button>
+        <input type="file" id="fileInput" class="file-input" accept="image/*" />
+      </footer>
+    </main>
+
+    <aside class="history-panel" id="historyPanel">
+      <div class="history-header">
+        <h2 class="history-title">Reading History</h2>
+        <button class="close-history" id="closeHistory">&times;</button>
+      </div>
+      <div class="history-list" id="historyList">
+        <!-- History items will be populated by JavaScript -->
+      </div>
+    </aside>
+
+    <div class="loading-overlay" id="loadingOverlay">
+      <div class="spinner"></div>
+      <p class="loading-text" id="loadingText">Processing image...</p>
+    </div>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        // State management
+        const state = {
+          isPlaying: false,
+          rate: 1,
+          pitch: 1,
+          currentLanguage: "en-US",
+          text: "",
+          speechSynthesis: window.speechSynthesis,
+          utterance: null,
+          currentWordIndex: 0,
+          words: [],
+          history: [],
+          isHistoryOpen: false,
+          isProcessing: false,
+          isEditMode: false,
+          selectedVoice: null,
+          voices: [],
+          ocrLanguage: "eng",
+          autoDetectLanguage: true,
+
+          // Available languages for speech
+          languages: [
+            { code: "en-US", name: "English (US)" },
+            { code: "en-GB", name: "English (UK)" },
+            { code: "es-ES", name: "Español" },
+            { code: "fr-FR", name: "Français" },
+            { code: "de-DE", name: "Deutsch" },
+            { code: "it-IT", name: "Italiano" },
+            { code: "zh-CN", name: "中文 (简体)" },
+            { code: "zh-TW", name: "中文 (繁體)" },
+            { code: "ja-JP", name: "日本語" },
+            { code: "ko-KR", name: "한국어" },
+            { code: "ru-RU", name: "Русский" },
+            { code: "pt-BR", name: "Português (Brasil)" },
+            { code: "ar-SA", name: "العربية" },
+            { code: "hi-IN", name: "हिन्दी" },
+            { code: "th-TH", name: "ไทย" },
+          ],
+
+          // Available languages for OCR
+          ocrLanguages: [
+            { code: "eng", name: "English" },
+            { code: "spa", name: "Spanish" },
+            { code: "fra", name: "French" },
+            { code: "deu", name: "German" },
+            { code: "ita", name: "Italian" },
+            { code: "por", name: "Portuguese" },
+            { code: "chi_sim", name: "Chinese (Simplified)" },
+            { code: "chi_tra", name: "Chinese (Traditional)" },
+            { code: "jpn", name: "Japanese" },
+            { code: "kor", name: "Korean" },
+            { code: "rus", name: "Russian" },
+            { code: "ara", name: "Arabic" },
+            { code: "hin", name: "Hindi" },
+            { code: "tha", name: "Thai" },
+            { code: "vie", name: "Vietnamese" },
+          ],
+        };
+
+        // DOM elements
+        const playPauseButton = document.getElementById("playPauseButton");
+        const playPauseText = document.getElementById("playPauseText");
+        const speedControl = document.getElementById("speedControl");
+        const pitchControl = document.getElementById("pitchControl");
+        const languageSelector = document.getElementById("languageSelector");
+        const voiceSelector = document.getElementById("voiceSelector");
+        const previewVoice = document.getElementById("previewVoice");
+        const textContent = document.getElementById("textContent");
+        const textEditor = document.getElementById("textEditor");
+        const bookContent = document.getElementById("bookContent");
+        const scanButton = document.getElementById("scanButton");
+        const uploadOption = document.getElementById("uploadOption");
+        const cameraOption = document.getElementById("cameraOption");
+        const fileInput = document.getElementById("fileInput");
+        const historyButton = document.getElementById("historyButton");
+        const historyPanel = document.getElementById("historyPanel");
+        const closeHistory = document.getElementById("closeHistory");
+        const historyList = document.getElementById("historyList");
+        const loadingOverlay = document.getElementById("loadingOverlay");
+        const loadingText = document.getElementById("loadingText");
+        const storyReader = document.getElementById("storyReader");
+        const editButton = document.getElementById("editButton");
+        const saveEdit = document.getElementById("saveEdit");
+        const cancelEdit = document.getElementById("cancelEdit");
+        const ocrLanguageSelector = document.getElementById(
+          "ocrLanguageSelector",
+        );
+        const autoDetectLang = document.getElementById("autoDetectLang");
+        const layer1 = document.getElementById("layer1");
+        const layer2 = document.getElementById("layer2");
+        const layer3 = document.getElementById("layer3");
+
+        // Initialize language selectors
+        state.languages.forEach((lang) => {
+          const option = document.createElement("option");
+          option.value = lang.code;
+          option.textContent = lang.name;
+          languageSelector.appendChild(option);
+        });
+
+        state.ocrLanguages.forEach((lang) => {
+          const option = document.createElement("option");
+          option.value = lang.code;
+          option.textContent = lang.name;
+          ocrLanguageSelector.appendChild(option);
+        });
+
+        // Initialize voices
+        function loadVoices() {
+          // Get available voices
+          state.voices = state.speechSynthesis.getVoices();
+
+          // Clear existing options
+          while (voiceSelector.options.length > 1) {
+            voiceSelector.remove(1);
+          }
+
+          // Add voices to selector
+          state.voices.forEach((voice) => {
+            const option = document.createElement("option");
+            option.value = voice.name;
+            option.textContent = `${voice.name} (${voice.lang})`;
+            voiceSelector.appendChild(option);
+          });
+        }
+
+        // Chrome loads voices asynchronously
+        if (state.speechSynthesis.onvoiceschanged !== undefined) {
+          state.speechSynthesis.onvoiceschanged = loadVoices;
+        }
+
+        // Initial load of voices
+        setTimeout(loadVoices, 100);
+
+        // Load history from localStorage
+        function loadHistory() {
+          const savedHistory = localStorage.getItem("storyReaderHistory");
+          if (savedHistory) {
+            state.history = JSON.parse(savedHistory);
+            renderHistoryList();
+          }
+        }
+
+        // Save history to localStorage
+        function saveHistory() {
+          localStorage.setItem(
+            "storyReaderHistory",
+            JSON.stringify(state.history),
+          );
+        }
+
+        // Add new item to history
+        function addToHistory(text) {
+          const now = new Date();
+          const title = `Scan ${now.toLocaleDateString()} ${now.toLocaleTimeString()}`;
+          const preview =
+            text.substring(0, 100) + (text.length > 100 ? "..." : "");
+
+          const historyItem = {
+            id: Date.now(),
+            title,
+            date: now.toISOString(),
+            text,
+            preview,
+          };
+
+          state.history.unshift(historyItem);
+
+          // Limit history to 20 items
+          if (state.history.length > 20) {
+            state.history.pop();
+          }
+
+          saveHistory();
+          renderHistoryList();
+        }
+
+        // Render history list
+        function renderHistoryList() {
+          historyList.innerHTML = "";
+
+          if (state.history.length === 0) {
+            const emptyMessage = document.createElement("p");
+            emptyMessage.textContent =
+              "No history yet. Scan some pages to get started.";
+            emptyMessage.style.color = "#64748b";
+            emptyMessage.style.textAlign = "center";
+            emptyMessage.style.padding = "20px";
+            historyList.appendChild(emptyMessage);
+            return;
+          }
+
+          state.history.forEach((item) => {
+            const historyItem = document.createElement("div");
+            historyItem.className = "history-item";
+            historyItem.dataset.id = item.id;
+
+            const title = document.createElement("div");
+            title.className = "history-item-title";
+            title.textContent = item.title;
+
+            const date = document.createElement("div");
+            date.className = "history-item-date";
+            date.textContent = new Date(item.date).toLocaleString();
+
+            const preview = document.createElement("div");
+            preview.className = "history-item-preview";
+            preview.textContent = item.preview;
+
+            historyItem.appendChild(title);
+            historyItem.appendChild(date);
+            historyItem.appendChild(preview);
+
+            historyItem.addEventListener("click", () => {
+              loadTextFromHistory(item.id);
+            });
+
+            historyList.appendChild(historyItem);
+          });
+        }
+
+        // Load text from history
+        function loadTextFromHistory(id) {
+          const item = state.history.find((item) => item.id === id);
+          if (item) {
+            state.text = item.text;
+            prepareTextForReading();
+            updateUI();
+            toggleHistoryPanel();
+          }
+        }
+
+        // Toggle history panel
+        function toggleHistoryPanel() {
+          state.isHistoryOpen = !state.isHistoryOpen;
+          historyPanel.classList.toggle("open", state.isHistoryOpen);
+        }
+
+        // Toggle edit mode
+        function toggleEditMode() {
+          state.isEditMode = !state.isEditMode;
+          bookContent.classList.toggle("edit-mode", state.isEditMode);
+
+          if (state.isEditMode) {
+            // Enter edit mode
+            textEditor.value = state.text;
+            editButton.textContent = "Cancel Edit";
+          } else {
+            // Exit edit mode
+            editButton.textContent = "Edit Text";
+          }
+        }
+
+        // Save edited text
+        function saveEditedText() {
+          const newText = textEditor.value.trim();
+          if (newText) {
+            state.text = newText;
+            prepareTextForReading();
+            addToHistory(state.text);
+          }
+          toggleEditMode();
+        }
+
+        // Prepare text for reading with word highlighting
+        function prepareTextForReading() {
+          // Split text into words
+          state.words = state.text.split(/\s+/);
+          state.currentWordIndex = 0;
+
+          // Create word spans
+          textContent.innerHTML = "";
+          state.words.forEach((word, index) => {
+            const wordSpan = document.createElement("span");
+            wordSpan.className = "word";
+            wordSpan.textContent = word;
+            wordSpan.dataset.index = index;
+
+            textContent.appendChild(wordSpan);
+
+            // Add space after word (except last word)
+            if (index < state.words.length - 1) {
+              textContent.appendChild(document.createTextNode(" "));
+            }
+          });
+        }
+
+        // Highlight current word
+        function highlightWord(index) {
+          // Remove previous highlight
+          const previousWord = textContent.querySelector(".word.active");
+          if (previousWord) {
+            previousWord.classList.remove("active");
+          }
+
+          // Add highlight to current word
+          const currentWord = textContent.querySelector(
+            `.word[data-index="${index}"]`,
+          );
+          if (currentWord) {
+            currentWord.classList.add("active");
+
+            // Scroll to word if needed
+            const containerRect = textContent.getBoundingClientRect();
+            const wordRect = currentWord.getBoundingClientRect();
+
+            if (
+              wordRect.bottom > containerRect.bottom ||
+              wordRect.top < containerRect.top
+            ) {
+              currentWord.scrollIntoView({
+                behavior: "smooth",
+                block: "center",
+              });
+            }
+          }
+        }
+
+        // Process image with OCR
+        async function processImage(imageFile) {
+          try {
+            state.isProcessing = true;
+            loadingOverlay.classList.add("active");
+            loadingText.textContent = "Processing image...";
+
+            const worker = await Tesseract.createWorker();
+
+            // Update progress
+            worker.setProgressHandler((progress) => {
+              if (progress.status === "recognizing text") {
+                loadingText.textContent = `Recognizing text: ${Math.round(progress.progress * 100)}%`;
+              }
+            });
+
+            // Determine language for OCR
+            let ocrLang = state.ocrLanguage;
+
+            if (state.autoDetectLanguage) {
+              loadingText.textContent = "Detecting language...";
+
+              // For auto-detection, we first try with script detection
+              await worker.loadLanguage("osd");
+              await worker.initialize("osd");
+
+              const {
+                data: { script },
+              } = await worker.detect(imageFile);
+
+              // Map detected script to appropriate language
+              const scriptToLang = {
+                Latin: "eng",
+                Arabic: "ara",
+                Cyrillic: "rus",
+                Devanagari: "hin",
+                Han: "chi_sim",
+                Hangul: "kor",
+                Japanese: "jpn",
+                Thai: "tha",
+              };
+
+              ocrLang = scriptToLang[script] || "eng";
+
+              // Update OCR language selector
+              ocrLanguageSelector.value = ocrLang;
+
+              // Reinitialize worker with detected language
+              await worker.terminate();
+              const worker2 = await Tesseract.createWorker();
+              worker = worker2;
+            }
+
+            await worker.loadLanguage(ocrLang);
+            await worker.initialize(ocrLang);
+
+            loadingText.textContent = "Recognizing text...";
+            const result = await worker.recognize(imageFile);
+            state.text = result.data.text;
+
+            // Add to history
+            addToHistory(state.text);
+
+            // Prepare text for reading
+            prepareTextForReading();
+
+            // Clean up
+            await worker.terminate();
+            state.isProcessing = false;
+            loadingOverlay.classList.remove("active");
+
+            // Update UI
+            updateUI();
+          } catch (error) {
+            console.error("OCR Error:", error);
+            loadingText.textContent =
+              "Error processing image. Please try again.";
+            setTimeout(() => {
+              loadingOverlay.classList.remove("active");
+              state.isProcessing = false;
+            }, 2000);
+          }
+        }
+
+        // Handle file upload
+        function handleFileUpload(event) {
+          const file = event.target.files[0];
+          if (file && file.type.startsWith("image/")) {
+            processImage(file);
+          }
+        }
+
+        // Handle camera capture
+        async function openCamera() {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+              video: true,
+            });
+
+            // Create video and canvas elements
+            const videoElement = document.createElement("video");
+            videoElement.srcObject = stream;
+            videoElement.style.display = "none";
+            document.body.appendChild(videoElement);
+
+            const canvasElement = document.createElement("canvas");
+            canvasElement.style.display = "none";
+            document.body.appendChild(canvasElement);
+
+            // Create capture UI
+            const captureUI = document.createElement("div");
+            captureUI.style.position = "fixed";
+            captureUI.style.top = "0";
+            captureUI.style.left = "0";
+            captureUI.style.width = "100%";
+            captureUI.style.height = "100%";
+            captureUI.style.backgroundColor = "rgba(0, 0, 0, 0.9)";
+            captureUI.style.zIndex = "2000";
+            captureUI.style.display = "flex";
+            captureUI.style.flexDirection = "column";
+            captureUI.style.alignItems = "center";
+            captureUI.style.justifyContent = "center";
+
+            const previewVideo = document.createElement("video");
+            previewVideo.srcObject = stream;
+            previewVideo.style.maxWidth = "90%";
+            previewVideo.style.maxHeight = "70vh";
+            previewVideo.style.borderRadius = "8px";
+            previewVideo.style.marginBottom = "20px";
+            previewVideo.autoplay = true;
+
+            const captureButton = document.createElement("button");
+            captureButton.textContent = "Capture";
+            captureButton.style.padding = "12px 24px";
+            captureButton.style.backgroundColor = "#0ea5e9";
+            captureButton.style.color = "white";
+            captureButton.style.border = "none";
+            captureButton.style.borderRadius = "8px";
+            captureButton.style.cursor = "pointer";
+            captureButton.style.fontSize = "16px";
+            captureButton.style.fontWeight = "bold";
+
+            const cancelButton = document.createElement("button");
+            cancelButton.textContent = "Cancel";
+            cancelButton.style.padding = "12px 24px";
+            cancelButton.style.backgroundColor = "#ef4444";
+            cancelButton.style.color = "white";
+            cancelButton.style.border = "none";
+            cancelButton.style.borderRadius = "8px";
+            cancelButton.style.cursor = "pointer";
+            cancelButton.style.fontSize = "16px";
+            cancelButton.style.fontWeight = "bold";
+            cancelButton.style.marginLeft = "10px";
+
+            const buttonContainer = document.createElement("div");
+            buttonContainer.appendChild(captureButton);
+            buttonContainer.appendChild(cancelButton);
+
+            captureUI.appendChild(previewVideo);
+            captureUI.appendChild(buttonContainer);
+
+            document.body.appendChild(captureUI);
+
+            // Handle capture
+            captureButton.addEventListener("click", () => {
+              const context = canvasElement.getContext("2d");
+              canvasElement.width = previewVideo.videoWidth;
+              canvasElement.height = previewVideo.videoHeight;
+              context.drawImage(
+                previewVideo,
+                0,
+                0,
+                canvasElement.width,
+                canvasElement.height,
+              );
+
+              // Convert to file
+              canvasElement.toBlob(
+                (blob) => {
+                  // Clean up
+                  stream.getTracks().forEach((track) => track.stop());
+                  document.body.removeChild(captureUI);
+                  document.body.removeChild(videoElement);
+                  document.body.removeChild(canvasElement);
+
+                  // Process image
+                  processImage(blob);
+                },
+                "image/jpeg",
+                0.95,
+              );
+            });
+
+            // Handle cancel
+            cancelButton.addEventListener("click", () => {
+              stream.getTracks().forEach((track) => track.stop());
+              document.body.removeChild(captureUI);
+              document.body.removeChild(videoElement);
+              document.body.removeChild(canvasElement);
+            });
+          } catch (error) {
+            console.error("Camera Error:", error);
+            alert(
+              "Could not access camera. Please check permissions and try again.",
+            );
+          }
+        }
+
+        // Preview selected voice
+        function previewSelectedVoice() {
+          if (state.speechSynthesis) {
+            // Cancel any ongoing speech
+            state.speechSynthesis.cancel();
+
+            const previewText = "This is a preview of the selected voice.";
+            const utterance = new SpeechSynthesisUtterance(previewText);
+
+            // Set language and voice
+            utterance.lang = state.currentLanguage;
+            utterance.rate = state.rate;
+            utterance.pitch = state.pitch;
+
+            // Set selected voice if any
+            if (state.selectedVoice) {
+              const voice = state.voices.find(
+                (v) => v.name === state.selectedVoice,
+              );
+              if (voice) {
+                utterance.voice = voice;
+              }
+            }
+
+            state.speechSynthesis.speak(utterance);
+          }
+        }
+
+        // Speech synthesis functions
+        function speak() {
+          if (!state.speechSynthesis) return;
+
+          // Cancel any ongoing speech
+          state.speechSynthesis.cancel();
+
+          if (!state.text) {
+            textContent.textContent =
+              "No text to read. Please scan a page first.";
+            return;
+          }
+
+          const utterance = new SpeechSynthesisUtterance(state.text);
+          utterance.lang = state.currentLanguage;
+          utterance.rate = state.rate;
+          utterance.pitch = state.pitch;
+
+          // Set selected voice if any
+          if (state.selectedVoice) {
+            const voice = state.voices.find(
+              (v) => v.name === state.selectedVoice,
+            );
+            if (voice) {
+              utterance.voice = voice;
+            }
+          }
+
+          // Set up word boundaries for highlighting
+          utterance.onboundary = (event) => {
+            if (event.name === "word") {
+              // Calculate current word index
+              const text = state.text.substring(0, event.charIndex).trim();
+              const wordCount = text.split(/\s+/).length - 1;
+              state.currentWordIndex = wordCount;
+              highlightWord(state.currentWordIndex);
+            }
+          };
+
+          utterance.onstart = () => {
+            state.isPlaying = true;
+            updateUI();
+          };
+
+          utterance.onend = () => {
+            state.isPlaying = false;
+            state.currentWordIndex = 0;
+            updateUI();
+          };
+
+          state.utterance = utterance;
+          state.speechSynthesis.speak(utterance);
+        }
+
+        function pause() {
+          if (state.speechSynthesis) {
+            state.speechSynthesis.pause();
+            state.isPlaying = false;
+            updateUI();
+          }
+        }
+
+        function resume() {
+          if (state.speechSynthesis) {
+            state.speechSynthesis.resume();
+            state.isPlaying = true;
+            updateUI();
+          }
+        }
+
+        function stop() {
+          if (state.speechSynthesis) {
+            state.speechSynthesis.cancel();
+            state.isPlaying = false;
+            state.currentWordIndex = 0;
+            updateUI();
+          }
+        }
+
+        // UI update function
+        function updateUI() {
+          playPauseText.textContent = state.isPlaying ? "Pause" : "Play";
+
+          if (!state.text) {
+            textContent.textContent = "Scan a book page to begin reading";
+          }
+        }
+
+        // Create star particles
+        function createStars() {
+          // Remove existing stars
+          document
+            .querySelectorAll(".star-particle")
+            .forEach((star) => star.remove());
+
+          // Create new stars
+          for (let i = 0; i < 100; i++) {
+            const star = document.createElement("div");
+            star.className = "star-particle";
+
+            // Random position
+            const posX = Math.random() * 100;
+            const posY = Math.random() * 100;
+            star.style.left = `${posX}%`;
+            star.style.top = `${posY}%`;
+
+            // Random size
+            const size = Math.random() * 2 + 1;
+            star.style.width = `${size}px`;
+            star.style.height = `${size}px`;
+
+            // Random animation delay
+            star.style.animationDelay = `${Math.random() * 4}s`;
+
+            layer3.appendChild(star);
+          }
+        }
+
+        // Create floating particles
+        function createParticles() {
+          // Create floating particles
+          for (let i = 0; i < 8; i++) {
+            const particle = document.createElement("div");
+            particle.className = "floating-particle";
+
+            // Random size between 100px and 300px
+            const size = Math.random() * 200 + 100;
+            particle.style.width = `${size}px`;
+            particle.style.height = `${size}px`;
+
+            // Random position
+            const posX = Math.random() * 100;
+            const posY = Math.random() * 100;
+            particle.style.left = `${posX}%`;
+            particle.style.top = `${posY}%`;
+
+            // Random z-index for depth
+            const zIndex = Math.floor(Math.random() * 3) + 1;
+            particle.style.zIndex = zIndex;
+
+            // Add to appropriate layer
+            if (zIndex === 1) {
+              layer1.appendChild(particle);
+            } else if (zIndex === 2) {
+              layer2.appendChild(particle);
+            } else {
+              layer3.appendChild(particle);
+            }
+          }
+        }
+
+        // Handle parallax effect
+        function handleParallax(event) {
+          const { clientX, clientY } = event;
+          const { innerWidth, innerHeight } = window;
+
+          // Calculate mouse position as percentage from center
+          const mouseX = (clientX / innerWidth - 0.5) * 2; // -1 to 1
+          const mouseY = (clientY / innerHeight - 0.5) * 2; // -1 to 1
+
+          // Move layers with different intensities for parallax effect
+          layer1.style.transform = `translate(${mouseX * 20}px, ${mouseY * 20}px)`;
+          layer2.style.transform = `translate(${mouseX * -15}px, ${mouseY * -15}px)`;
+          layer3.style.transform = `translate(${mouseX * 10}px, ${mouseY * 10}px)`;
+
+          // Move particles with different speeds based on their size
+          const particles = document.querySelectorAll(".floating-particle");
+          particles.forEach((particle) => {
+            const size = parseFloat(particle.style.width);
+            const speed = 300 / size; // Smaller particles move faster
+
+            const layer = particle.parentElement;
+            const layerSpeed =
+              layer === layer1 ? 1.5 : layer === layer2 ? 1.0 : 0.7;
+
+            const x = mouseX * 30 * speed * layerSpeed;
+            const y = mouseY * 30 * speed * layerSpeed;
+
+            particle.style.transform = `translate(${x}px, ${y}px)`;
+          });
+        }
+
+        // Optimize mouse move with requestAnimationFrame
+        let ticking = false;
+        function optimizedParallax(event) {
+          if (!ticking) {
+            window.requestAnimationFrame(() => {
+              handleParallax(event);
+              ticking = false;
+            });
+            ticking = true;
+          }
+        }
+
+        // Event listeners
+        playPauseButton.addEventListener("click", () => {
+          if (state.isPlaying) {
+            pause();
+          } else {
+            if (state.speechSynthesis.paused) {
+              resume();
+            } else {
+              speak();
+            }
+          }
+        });
+
+        speedControl.addEventListener("input", (e) => {
+          state.rate = parseFloat(e.target.value);
+          if (state.isPlaying) {
+            stop();
+            speak();
+          }
+        });
+
+        pitchControl.addEventListener("input", (e) => {
+          state.pitch = parseFloat(e.target.value);
+          if (state.isPlaying) {
+            stop();
+            speak();
+          }
+        });
+
+        languageSelector.addEventListener("change", (e) => {
+          state.currentLanguage = e.target.value;
+          if (state.isPlaying) {
+            stop();
+            speak();
+          }
+        });
+
+        voiceSelector.addEventListener("change", (e) => {
+          state.selectedVoice = e.target.value;
+          if (state.isPlaying) {
+            stop();
+            speak();
+          }
+        });
+
+        previewVoice.addEventListener("click", previewSelectedVoice);
+
+        scanButton.addEventListener("click", () => {
+          // Show options on mobile
+          if (window.innerWidth <= 640) {
+            const scanOptions = document.querySelector(".scan-options");
+            scanOptions.style.transform = "translateY(0)";
+            scanOptions.style.opacity = "1";
+            scanOptions.style.pointerEvents = "all";
+
+            // Hide after 3 seconds
+            setTimeout(() => {
+              scanOptions.style.transform = "translateY(10px)";
+              scanOptions.style.opacity = "0";
+              scanOptions.style.pointerEvents = "none";
+            }, 3000);
+          }
+        });
+
+        uploadOption.addEventListener("click", () => {
+          fileInput.click();
+        });
+
+        cameraOption.addEventListener("click", () => {
+          openCamera();
+        });
+
+        fileInput.addEventListener("change", handleFileUpload);
+
+        historyButton.addEventListener("click", toggleHistoryPanel);
+        closeHistory.addEventListener("click", toggleHistoryPanel);
+
+        editButton.addEventListener("click", toggleEditMode);
+        saveEdit.addEventListener("click", saveEditedText);
+        cancelEdit.addEventListener("click", toggleEditMode);
+
+        ocrLanguageSelector.addEventListener("change", (e) => {
+          state.ocrLanguage = e.target.value;
+        });
+
+        autoDetectLang.addEventListener("change", (e) => {
+          state.autoDetectLanguage = e.target.checked;
+          ocrLanguageSelector.disabled = state.autoDetectLanguage;
+        });
+
+        document.addEventListener("mousemove", optimizedParallax);
+
+        // Initialize
+        loadHistory();
+        createParticles();
+        createStars();
+
+        // Set initial state for OCR language selector
+        ocrLanguageSelector.disabled = state.autoDetectLanguage;
+
+        // Demo text for testing (can be removed in production)
+        scanButton.addEventListener("dblclick", () => {
+          state.text =
+            "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.";
+          prepareTextForReading();
+          addToHistory(state.text);
+          updateUI();
+        });
+      });
+    </script>
+  </body>
+</html>
